@@ -2,48 +2,34 @@ import requests
 from bs4 import BeautifulSoup
 import csv
 
-def scrape_github_trending():
-    url = "https://github.com/trending"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-    }
+URL = "https://github.com/trending"
+
+def scrape_trending_repos():
+    response = requests.get(URL)
+    soup = BeautifulSoup(response.text, 'html.parser')
     
-    try:
-        # Send HTTP request
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
+    repos = []
+    for article in soup.select('article.Box-row')[:5]:  # Get top 5
+        link = article.select_one('h2 a')
+        repo_name = link.get_text(strip=True).replace(' ', '')
+        repo_url = f"https://github.com{link['href']}"
+        repos.append({'name': repo_name, 'url': repo_url})
+    
+    return repos
+
+def save_to_csv(repos, filename='trending_repos.csv'):
+    with open(filename, 'w', newline='') as csvfile:
+        fieldnames = ['repository name', 'link']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         
-        # Parse HTML content
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Find all repository articles
-        repos = soup.find_all('article', class_='Box-row', limit=5)
-        
-        # Prepare data for CSV
-        data = []
+        writer.writeheader()
         for repo in repos:
-            # Get repository name
-            name_element = repo.find('h2', class_='h3')
-            name = name_element.get_text(strip=True).replace('/', '').strip()
-            
-            # Get repository URL
-            relative_url = name_element.find('a')['href']
-            url = f"https://github.com{relative_url}"
-            
-            data.append([name, url])
-        
-        # Write to CSV file
-        with open('github_trending.csv', 'w', newline='', encoding='utf-8') as file:
-            writer = csv.writer(file)
-            writer.writerow(['repository name', 'link'])
-            writer.writerows(data)
-            
-        print("Successfully scraped and saved top 5 trending repositories to github_trending.csv")
-        
-    except requests.exceptions.RequestException as e:
-        print(f"Error fetching the page: {e}")
-    except Exception as e:
-        print(f"An error occurred: {e}")
+            writer.writerow({
+                'repository name': repo['name'],
+                'link': repo['url']
+            })
 
 if __name__ == "__main__":
-    scrape_github_trending()
+    trending_repos = scrape_trending_repos()
+    save_to_csv(trending_repos)
+    print("Successfully saved top 5 trending repositories to trending_repos.csv")
